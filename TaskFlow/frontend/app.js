@@ -12,7 +12,7 @@
    ============================================================ */
 const API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:4000/api'
-  : 'https://SEU-PROJETO.up.railway.app/api'; // ← trocar após deploy
+  : 'https://taskflow-production-cedc.up.railway.app/api';
 
 const GOOGLE_CLIENT_ID = 'SEU_GOOGLE_CLIENT_ID.apps.googleusercontent.com'; // ← trocar
 
