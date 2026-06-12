@@ -148,7 +148,6 @@ npm run dev                # API em http://localhost:4000
 # (ou use a extensão Live Server do VS Code)
 ```
 
-> Guia completo de deploy (Railway + Vercel + Google OAuth) disponível em [`DEPLOY.md`](./DEPLOY.md).
 
 ---
 
