@@ -14,7 +14,7 @@ const API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:4000/api'
   : 'https://taskflow-production-cedc.up.railway.app/api';
 
-const GOOGLE_CLIENT_ID = 'SEU_GOOGLE_CLIENT_ID.apps.googleusercontent.com'; // ← trocar
+const GOOGLE_CLIENT_ID = '1005936981166-tean42kh9rg9j9ibgogqpkaqlf2st79a.apps.googleusercontent.com';
 
 /* ============================================================
    DATE HELPERS
