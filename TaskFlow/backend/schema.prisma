@@ -1,0 +1,55 @@
+// prisma/schema.prisma
+// TaskFlow — Evandro Moresco · Oggi Sec
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String?  @unique
+  email        String   @unique
+  passwordHash String?  // null para usuários OAuth
+  googleId     String?  @unique
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tasks Task[]
+
+  @@map("users")
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  text        String
+  status      Status   @default(TODO)
+  priority    Priority @default(MEDIA)
+  date        String   // formato 'YYYY-MM-DD'
+  carriedFrom String?  // data de origem se foi transportada
+  carriedTo   String?  // data para onde foi transportada
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}
+
+enum Status {
+  TODO
+  DOING
+  DONE
+}
+
+enum Priority {
+  ALTA
+  MEDIA
+  BAIXA
+}
