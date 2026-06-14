@@ -17,6 +17,40 @@ const API_URL = window.location.hostname === 'localhost'
 const GOOGLE_CLIENT_ID = '1005936981166-tean42kh9rg9j9ibgogqpkaqlf2st79a.apps.googleusercontent.com';
 
 /* ============================================================
+   TEMA CLARO / ESCURO
+   ============================================================ */
+const THEME_KEY = 'taskflow_theme';
+
+function applyTheme(theme) {
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+}
+
+function toggleTheme() {
+  const current = localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark';
+  const next = current === 'light' ? 'dark' : 'light';
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+}
+
+(function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved) {
+    applyTheme(saved);
+  } else {
+    // Sem preferência salva: usa o tema do sistema
+    const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+    applyTheme(prefersLight ? 'light' : 'dark');
+  }
+})();
+
+document.getElementById('themeToggleLogin').addEventListener('click', toggleTheme);
+document.getElementById('themeToggleApp').addEventListener('click', toggleTheme);
+
+/* ============================================================
    DATE HELPERS
    ============================================================ */
 function fmtISO(d) {
@@ -36,6 +70,13 @@ function formatDateLabel(iso) {
 function formatShort(iso) {
   const d = isoToDate(iso);
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function formatDateTime(isoString) {
+  if (!isoString) return '—';
+  const d = new Date(isoString);
+  const date = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  return `${date} às ${time}`;
 }
 
 /* ============================================================
@@ -90,6 +131,17 @@ const carryText       = document.getElementById('carryText');
 const carryBtn        = document.getElementById('carryBtn');
 const newTaskInput    = document.getElementById('newTaskInput');
 const newTaskPriority = document.getElementById('newTaskPriority');
+
+// Modal de edição
+const editModalOverlay = document.getElementById('editModalOverlay');
+const editText         = document.getElementById('editText');
+const editPriority     = document.getElementById('editPriority');
+const editCreatedAt    = document.getElementById('editCreatedAt');
+const editCompletedAt  = document.getElementById('editCompletedAt');
+const editErr          = document.getElementById('editErr');
+const editSaveBtn      = document.getElementById('editSaveBtn');
+const editCancelBtn    = document.getElementById('editCancelBtn');
+let editingTaskId = null;
 
 /* ============================================================
    GOOGLE OAUTH — inicializa o botão
@@ -183,7 +235,9 @@ function afterLogin(data) {
     img.style.display    = 'inline-block';
     letter.style.display = 'none';
   } else {
-    letter.textContent   = (currentUser.username || currentUser.email).charAt(0).toUpperCase();
+    img.style.display     = 'none';
+    letter.style.display  = 'flex';
+    letter.textContent    = (currentUser.username || currentUser.email).charAt(0).toUpperCase();
   }
 
   document.getElementById('userLabel').textContent = currentUser.username || currentUser.email.split('@')[0];
@@ -303,6 +357,8 @@ function renderCard(t) {
   const textDiv       = document.createElement('div');
   textDiv.className   = 'card-text';
   textDiv.textContent = t.text;
+  textDiv.title       = 'Clique para editar';
+  textDiv.addEventListener('click', () => openEditModal(t));
   card.appendChild(textDiv);
 
   const meta     = document.createElement('div');
@@ -340,12 +396,27 @@ function renderCard(t) {
     actions.appendChild(b);
   }
 
+  const edit = makeIconBtn('✎', 'Editar');
+  edit.addEventListener('click', () => openEditModal(t));
+  actions.appendChild(edit);
+
   const del = makeIconBtn('✕', 'Excluir', 'del');
   del.addEventListener('click', () => deleteTask(t.id));
   actions.appendChild(del);
 
   meta.appendChild(actions);
   card.appendChild(meta);
+
+  // Datas de criação e conclusão
+  const stamps = document.createElement('div');
+  stamps.className = 'card-timestamps';
+  let stampsHtml = `Criada: ${formatDateTime(t.createdAt)}`;
+  if (t.completedAt) {
+    stampsHtml += `<br>Concluída: ${formatDateTime(t.completedAt)}`;
+  }
+  stamps.innerHTML = stampsHtml;
+  card.appendChild(stamps);
+
   return card;
 }
 
@@ -403,15 +474,22 @@ async function addTask() {
 
 async function updateTaskStatus(t, newStatus) {
   // Atualiza localmente para resposta imediata (optimistic update)
-  const oldStatus = t.status;
+  const oldStatus      = t.status;
+  const oldCompletedAt = t.completedAt;
   t.status = newStatus;
+  if (newStatus === 'DONE' && oldStatus !== 'DONE') {
+    t.completedAt = new Date().toISOString();
+  } else if (newStatus !== 'DONE' && oldStatus === 'DONE') {
+    t.completedAt = null;
+  }
   render();
 
   try {
     await api('PUT', `/tasks/${t.id}`, { status: newStatus });
   } catch (err) {
     // Reverte em caso de erro
-    t.status = oldStatus;
+    t.status      = oldStatus;
+    t.completedAt = oldCompletedAt;
     render();
     alert('Erro ao atualizar tarefa: ' + err.message);
   }
@@ -459,3 +537,60 @@ newTaskInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTask()
 document.getElementById('prevDay').addEventListener('click', () => { currentDate = addDays(currentDate, -1); loadDay(); });
 document.getElementById('nextDay').addEventListener('click', () => { currentDate = addDays(currentDate,  1); loadDay(); });
 document.getElementById('todayBtn').addEventListener('click', () => { currentDate = todayISO();               loadDay(); });
+
+/* ============================================================
+   MODAL DE EDIÇÃO DE TAREFA
+   ============================================================ */
+
+function openEditModal(t) {
+  editingTaskId = t.id;
+  editText.value     = t.text;
+  editPriority.value = t.priority || 'MEDIA';
+  editCreatedAt.textContent   = formatDateTime(t.createdAt);
+  editCompletedAt.textContent = t.completedAt ? formatDateTime(t.completedAt) : 'Ainda não concluída';
+  editErr.textContent = '';
+  editModalOverlay.style.display = 'flex';
+  setTimeout(() => editText.focus(), 0);
+}
+
+function closeEditModal() {
+  editModalOverlay.style.display = 'none';
+  editingTaskId = null;
+}
+
+editCancelBtn.addEventListener('click', closeEditModal);
+editModalOverlay.addEventListener('click', e => {
+  if (e.target === editModalOverlay) closeEditModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && editModalOverlay.style.display === 'flex') closeEditModal();
+});
+
+editSaveBtn.addEventListener('click', async () => {
+  const text     = editText.value.trim();
+  const priority = editPriority.value;
+
+  if (!text) {
+    editErr.textContent = 'A descrição não pode ficar vazia.';
+    return;
+  }
+
+  const t = tasks.find(x => x.id === editingTaskId) || allTasks.find(x => x.id === editingTaskId);
+  if (!t) { closeEditModal(); return; }
+
+  editSaveBtn.disabled    = true;
+  editSaveBtn.textContent = 'Salvando...';
+
+  try {
+    const data = await api('PUT', `/tasks/${editingTaskId}`, { text, priority });
+    t.text     = data.task.text;
+    t.priority = data.task.priority;
+    render();
+    closeEditModal();
+  } catch (err) {
+    editErr.textContent = err.message;
+  } finally {
+    editSaveBtn.disabled    = false;
+    editSaveBtn.textContent = 'Salvar alterações';
+  }
+});
