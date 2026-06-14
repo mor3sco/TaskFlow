@@ -70,13 +70,24 @@ async function update(req, res, next) {
       return res.status(404).json({ error: 'Tarefa não encontrada.' });
     }
 
+    // Define completedAt automaticamente ao mudar o status
+    let completedAt;
+    if (status !== undefined) {
+      if (status === 'DONE' && existing.status !== 'DONE') {
+        completedAt = new Date();       // marcou como concluída agora
+      } else if (status !== 'DONE' && existing.status === 'DONE') {
+        completedAt = null;             // voltou a ficar pendente
+      }
+    }
+
     const task = await prisma.task.update({
       where: { id },
       data: {
-        ...(text      !== undefined && { text }),
-        ...(status    !== undefined && { status }),
-        ...(priority  !== undefined && { priority }),
-        ...(carriedTo !== undefined && { carriedTo }),
+        ...(text        !== undefined && { text }),
+        ...(status      !== undefined && { status }),
+        ...(priority     !== undefined && { priority }),
+        ...(carriedTo    !== undefined && { carriedTo }),
+        ...(completedAt  !== undefined && { completedAt }),
       },
     });
     res.json({ task });
