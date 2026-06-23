@@ -44,11 +44,15 @@
     <div class="topbar">
       <div class="brand">Task<span>Flow</span></div>
       <div class="topbar-actions">
+        <button class="icon-action-btn" id="dashboardBtn" title="Dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+          <span class="icon-action-label">Dashboard</span>
+        </button>
         <button class="theme-toggle" id="themeToggleApp" title="Alternar tema" aria-label="Alternar tema">
           <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
-        <div class="user-pill">
+        <div class="user-pill" id="userPill" title="Editar perfil">
           <img class="avatar-img" id="avatarImg" src="" alt="" style="display:none;">
           <div class="avatar" id="avatarLetter">U</div>
           <span id="userLabel">usuário</span>
@@ -58,7 +62,9 @@
     </div>
     <div class="date-nav">
       <button class="nav-btn" id="prevDay">&#8249;</button>
-      <div class="date-label" id="dateLabel">—<small id="dateSub"></small></div>
+      <button class="date-label date-label-btn" id="dateLabelBtn" title="Abrir calendário">
+        <span id="dateLabel">—</span>
+      </button>
       <button class="nav-btn" id="nextDay">&#8250;</button>
       <button class="today-btn" id="todayBtn">Ir para hoje</button>
     </div>
@@ -108,7 +114,7 @@
           <a href="https://oggisec.com" target="_blank" rel="noopener">Oggi Sec</a>
           — Segurança &amp; TI
         </p>
-        <p class="footer-copy">© <span id="footerYear"></span> Tutti i diritti riservati</p>
+        <p class="footer-copy">© <span id="footerYear"></span> Todos os direitos reservados!</p>
       </div>
     </footer>
   </div>
@@ -148,6 +154,139 @@
       <div class="modal-actions">
         <button class="btn btn-ghost" id="editCancelBtn">Cancelar</button>
         <button class="btn btn-primary" id="editSaveBtn">Salvar alterações</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL CALENDÁRIO ==================== -->
+  <div id="calendarModalOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal modal-calendar">
+      <div class="calendar-header">
+        <button class="nav-btn" id="calPrevMonth">&#8249;</button>
+        <h3 class="modal-title calendar-month-label" id="calMonthLabel">—</h3>
+        <button class="nav-btn" id="calNextMonth">&#8250;</button>
+      </div>
+      <div class="calendar-weekdays">
+        <span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="calCancelBtn">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DASHBOARD ==================== -->
+  <div id="dashboardModalOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal modal-dashboard">
+      <div class="dashboard-header">
+        <h3 class="modal-title">Dashboard</h3>
+        <button class="icon-btn" id="dashboardCloseBtn" title="Fechar">✕</button>
+      </div>
+
+      <div class="dashboard-filters">
+        <div class="field">
+          <label for="dashMonth">Mês</label>
+          <input type="month" id="dashMonth">
+        </div>
+        <div class="field">
+          <label for="dashPriority">Prioridade</label>
+          <select id="dashPriority">
+            <option value="">Todas</option>
+            <option value="ALTA">Alta</option>
+            <option value="MEDIA">Média</option>
+            <option value="BAIXA">Baixa</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="dashStatus">Status</label>
+          <select id="dashStatus">
+            <option value="">Todos</option>
+            <option value="TODO">A Fazer</option>
+            <option value="DOING">Em Andamento</option>
+            <option value="DONE">Concluído</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="dashboard-stats" id="dashboardStats">
+        <div class="stat-card">
+          <span class="stat-value" id="statTotal">0</span>
+          <span class="stat-label">Total</span>
+        </div>
+        <div class="stat-card stat-done">
+          <span class="stat-value" id="statDone">0</span>
+          <span class="stat-label">Concluídas</span>
+        </div>
+        <div class="stat-card stat-doing">
+          <span class="stat-value" id="statDoing">0</span>
+          <span class="stat-label">Em andamento</span>
+        </div>
+        <div class="stat-card stat-todo">
+          <span class="stat-value" id="statTodo">0</span>
+          <span class="stat-label">Pendentes</span>
+        </div>
+      </div>
+
+      <div class="dashboard-progress">
+        <div class="progress-bar-label">
+          <span>Taxa de conclusão</span>
+          <span id="statRate">0%</span>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="statRateBar" style="width:0%;"></div>
+        </div>
+      </div>
+
+      <div id="dashboardList" class="dashboard-list"></div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL PERFIL ==================== -->
+  <div id="profileModalOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <h3 class="modal-title">Editar perfil</h3>
+
+      <div class="profile-avatar-preview">
+        <img id="profileAvatarPreview" class="avatar-img-lg" src="" alt="" style="display:none;">
+        <div id="profileAvatarLetterLg" class="avatar-lg">U</div>
+      </div>
+
+      <div class="field">
+        <label for="profileAvatarUrl">URL da foto de perfil</label>
+        <input type="url" id="profileAvatarUrl" placeholder="https://exemplo.com/sua-foto.jpg">
+      </div>
+
+      <div class="field">
+        <label for="profileUsername">Nome de usuário</label>
+        <input type="text" id="profileUsername" maxlength="60">
+      </div>
+
+      <div class="field">
+        <label>E-mail</label>
+        <input type="email" id="profileEmail" disabled>
+      </div>
+
+      <hr class="modal-divider">
+
+      <p class="profile-section-label">Alterar senha (opcional)</p>
+
+      <div class="field" id="profileCurrentPassField">
+        <label for="profileCurrentPassword">Senha atual</label>
+        <input type="password" id="profileCurrentPassword" placeholder="necessária para definir nova senha">
+      </div>
+
+      <div class="field">
+        <label for="profileNewPassword">Nova senha</label>
+        <input type="password" id="profileNewPassword" placeholder="mínimo 6 caracteres">
+      </div>
+
+      <div class="err" id="profileErr"></div>
+      <div class="success-msg" id="profileSuccess"></div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="profileCancelBtn">Cancelar</button>
+        <button class="btn btn-primary" id="profileSaveBtn">Salvar alterações</button>
       </div>
     </div>
   </div>
