@@ -8,7 +8,7 @@
 
 Organize seu dia a dia com um board visual no estilo Trello — login seguro, dados salvos na nuvem e acesso de qualquer dispositivo, a qualquer hora.
 
-[![Live Demo](https://img.shields.io/badge/🔗_Demo-Acessar-22d3ee?style=for-the-badge)](https://mor3sco.github.io/lista-de-tarefas/)
+[![Live Demo](https://img.shields.io/badge/🔗_Demo-Acessar-22d3ee?style=for-the-badge)](https://task-flow-r6ig.vercel.app)
 ![Status](https://img.shields.io/badge/status-em_desenvolvimento-fbbf24?style=for-the-badge)
 
 </div>
