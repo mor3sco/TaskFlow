@@ -101,7 +101,6 @@ async function googleAuth(req, res, next) {
     const { idToken } = req.body;
     if (!idToken) return res.status(400).json({ error: 'idToken não fornecido.' });
 
-    // Verifica o token do Google
     const ticket = await googleClient.verifyIdToken({
       idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
@@ -109,7 +108,6 @@ async function googleAuth(req, res, next) {
     const payload = ticket.getPayload();
     const { sub: googleId, email, name, picture } = payload;
 
-    // Busca ou cria usuário
     let user = await prisma.user.findFirst({
       where: { OR: [{ googleId }, { email }] },
     });
@@ -119,7 +117,6 @@ async function googleAuth(req, res, next) {
         data: { googleId, email, username: name, avatarUrl: picture },
       });
     } else if (!user.googleId) {
-      // Usuário existe com email mas sem Google vinculado → vincula
       user = await prisma.user.update({
         where: { id: user.id },
         data: { googleId, avatarUrl: picture },
@@ -129,6 +126,63 @@ async function googleAuth(req, res, next) {
     setCookieAndRespond(res, user.id, {
       id: user.id, username: user.username, email: user.email, avatarUrl: user.avatarUrl,
     });
+  } catch (err) { next(err); }
+}
+
+// ── Atualizar perfil (nome, foto, senha) ───────────────────────
+
+async function updateProfile(req, res, next) {
+  try {
+    const { username, avatarUrl, currentPassword, newPassword } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const data = {};
+
+    if (username !== undefined) {
+      const trimmed = username.trim();
+      if (!trimmed) {
+        return res.status(400).json({ error: 'Nome de usuário não pode ficar vazio.' });
+      }
+      if (trimmed !== user.username) {
+        const taken = await prisma.user.findUnique({ where: { username: trimmed } });
+        if (taken && taken.id !== user.id) {
+          return res.status(409).json({ error: 'Nome de usuário já está em uso.' });
+        }
+      }
+      data.username = trimmed;
+    }
+
+    if (avatarUrl !== undefined) {
+      data.avatarUrl = avatarUrl || null;
+    }
+
+    // Troca de senha exige a senha atual (apenas para contas com senha definida)
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+      }
+      if (user.passwordHash) {
+        if (!currentPassword) {
+          return res.status(400).json({ error: 'Informe a senha atual para definir uma nova.' });
+        }
+        const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!valid) {
+          return res.status(401).json({ error: 'Senha atual incorreta.' });
+        }
+      }
+      data.passwordHash = await bcrypt.hash(newPassword, 12);
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: req.userId },
+      data,
+      select: { id: true, username: true, email: true, avatarUrl: true, createdAt: true, passwordHash: true },
+    });
+
+    const { passwordHash: _ph, ...safeUser } = updated;
+    res.json({ user: { ...safeUser, hasPassword: !!updated.passwordHash } });
   } catch (err) { next(err); }
 }
 
@@ -145,11 +199,12 @@ async function me(req, res, next) {
   try {
     const user = await prisma.user.findUnique({
       where:  { id: req.userId },
-      select: { id: true, username: true, email: true, avatarUrl: true, createdAt: true },
+      select: { id: true, username: true, email: true, avatarUrl: true, createdAt: true, passwordHash: true },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
-    res.json({ user });
+    const { passwordHash, ...safeUser } = user;
+    res.json({ user: { ...safeUser, hasPassword: !!passwordHash } });
   } catch (err) { next(err); }
 }
 
-module.exports = { register, login, googleAuth, logout, me };
+module.exports = { register, login, googleAuth, logout, me, updateProfile };
