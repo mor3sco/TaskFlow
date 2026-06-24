@@ -136,11 +136,15 @@ taskflow/
 - [x] Navegação por data + carry-over de pendências
 - [x] Autenticação JWT + Google OAuth
 - [x] Backend com PostgreSQL + Prisma
-- [x] Notificações de tarefas atrasadas
-- [x] Etiquetas/categorias personalizadas
-- [x] Modo claro
-- [x] Versão mobile (PWA)
-
+- [x] Dashboard mensal com filtros
+- [x] Mini-calendário integrado
+- [x] Tema claro/escuro
+- [x] Editar perfil (nome, foto, senha)
+- [ ] Notificações de tarefas atrasadas
+- [ ] Etiquetas/categorias personalizadas
+- [ ] Versão mobile (PWA)
+- [ ] Domínio personalizado
+- [ ] 
 ---
 
 ## 👨‍💻 Autor
