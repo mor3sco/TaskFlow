@@ -94,6 +94,36 @@ async function update(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// ── Listar tarefas em um intervalo de datas (dashboard/calendário) ──
+
+async function getRange(req, res, next) {
+  try {
+    const { from, to, priority, status } = req.query;
+
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ error: 'Parâmetros from e to são obrigatórios (formato YYYY-MM-DD).' });
+    }
+
+    const where = {
+      userId: req.userId,
+      date:   { gte: from, lte: to },
+    };
+    if (priority && ['ALTA', 'MEDIA', 'BAIXA'].includes(priority)) {
+      where.priority = priority;
+    }
+    if (status && ['TODO', 'DOING', 'DONE'].includes(status)) {
+      where.status = status;
+    }
+
+    const tasks = await prisma.task.findMany({
+      where,
+      orderBy: { date: 'asc' },
+    });
+
+    res.json({ tasks });
+  } catch (err) { next(err); }
+}
+
 // ── Deletar tarefa ────────────────────────────────────────────
 
 async function remove(req, res, next) {
@@ -161,4 +191,4 @@ async function carryOver(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { getByDate, getAll, create, update, remove, carryOver };
+module.exports = { getByDate, getAll, getRange, create, update, remove, carryOver };
