@@ -51,6 +51,45 @@ document.getElementById('themeToggleLogin').addEventListener('click', toggleThem
 document.getElementById('themeToggleApp').addEventListener('click', toggleTheme);
 
 /* ============================================================
+   EXPIRAÇÃO DE SESSÃO POR INATIVIDADE
+   - O token fica em sessionStorage: fechar o navegador já desloga.
+   - Além disso, após INACTIVITY_LIMIT_MS sem interação, desloga
+     automaticamente mesmo com a aba aberta.
+   ============================================================ */
+const INACTIVITY_LIMIT_MS = 30 * 60 * 1000; // 30 minutos
+let inactivityTimer = null;
+
+function resetInactivityTimer() {
+  if (!getToken()) return; // só importa se estiver logado
+  clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(() => {
+    handleSessionExpired();
+  }, INACTIVITY_LIMIT_MS);
+}
+
+function startInactivityWatcher() {
+  ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt =>
+    document.addEventListener(evt, resetInactivityTimer, { passive: true })
+  );
+  resetInactivityTimer();
+}
+
+function stopInactivityWatcher() {
+  clearTimeout(inactivityTimer);
+}
+
+function handleSessionExpired() {
+  stopInactivityWatcher();
+  clearToken();
+  currentUser = null;
+  tasks    = [];
+  allTasks = [];
+  document.getElementById('appScreen').style.display   = 'none';
+  document.getElementById('loginScreen').style.display  = 'flex';
+  loginErr.textContent = 'Sua sessão expirou por inatividade. Faça login novamente.';
+}
+
+/* ============================================================
    DATE HELPERS
    ============================================================ */
 function fmtISO(d) {
@@ -82,9 +121,9 @@ function formatDateTime(isoString) {
 /* ============================================================
    API CLIENT — wrapper com token JWT automático
    ============================================================ */
-function getToken() { return localStorage.getItem('taskflow_token'); }
-function setToken(t) { localStorage.setItem('taskflow_token', t); }
-function clearToken() { localStorage.removeItem('taskflow_token'); }
+function getToken() { return sessionStorage.getItem('taskflow_token'); }
+function setToken(t) { sessionStorage.setItem('taskflow_token', t); }
+function clearToken() { sessionStorage.removeItem('taskflow_token'); }
 
 async function api(method, path, body) {
   const opts = {
@@ -126,6 +165,7 @@ const toggleLink      = document.getElementById('toggleLink');
 const toggleText      = document.getElementById('toggleText');
 const loginSub        = document.getElementById('loginSub');
 const dateLabel       = document.getElementById('dateLabel');
+const dateLabelBtn    = document.getElementById('dateLabelBtn');
 const carryBanner     = document.getElementById('carryBanner');
 const carryText       = document.getElementById('carryText');
 const carryBtn        = document.getElementById('carryBtn');
@@ -220,6 +260,21 @@ async function handleAuth() {
   }
 }
 
+function updateAvatarUI(user) {
+  const letter = document.getElementById('avatarLetter');
+  const img    = document.getElementById('avatarImg');
+  if (user.avatarUrl) {
+    img.src              = user.avatarUrl;
+    img.style.display    = 'inline-block';
+    letter.style.display = 'none';
+  } else {
+    img.style.display     = 'none';
+    letter.style.display  = 'flex';
+    letter.textContent    = (user.username || user.email).charAt(0).toUpperCase();
+  }
+  document.getElementById('userLabel').textContent = user.username || user.email.split('@')[0];
+}
+
 function afterLogin(data) {
   if (data.token) setToken(data.token);
   currentUser = data.user;
@@ -227,28 +282,17 @@ function afterLogin(data) {
   loginScreen.style.display = 'none';
   appScreen.style.display   = 'block';
 
-  // Avatar
-  const letter = document.getElementById('avatarLetter');
-  const img    = document.getElementById('avatarImg');
-  if (currentUser.avatarUrl) {
-    img.src              = currentUser.avatarUrl;
-    img.style.display    = 'inline-block';
-    letter.style.display = 'none';
-  } else {
-    img.style.display     = 'none';
-    letter.style.display  = 'flex';
-    letter.textContent    = (currentUser.username || currentUser.email).charAt(0).toUpperCase();
-  }
-
-  document.getElementById('userLabel').textContent = currentUser.username || currentUser.email.split('@')[0];
+  updateAvatarUI(currentUser);
   document.getElementById('footerYear').textContent = new Date().getFullYear();
 
   currentDate = todayISO();
   loadAll();
+  startInactivityWatcher();
 }
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
   try { await api('POST', '/auth/logout'); } catch {}
+  stopInactivityWatcher();
   clearToken();
   currentUser           = null;
   tasks                 = [];
@@ -258,14 +302,14 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   loginEmail.value = ''; loginPass.value = ''; loginErr.textContent = '';
 });
 
-/* Auto-login se token salvo */
+/* Auto-login se token salvo (válido só dentro da mesma aba/sessão) */
 (async function tryAutoLogin() {
   if (!getToken()) return;
   try {
     const data = await api('GET', '/auth/me');
-    afterLogin({ user: data.user }); // token já está no localStorage
+    afterLogin({ user: data.user }); // token já está salvo nesta sessão
   } catch {
-    clearToken(); // token expirado
+    clearToken(); // token expirado ou inválido
   }
 })();
 
@@ -563,7 +607,12 @@ editModalOverlay.addEventListener('click', e => {
   if (e.target === editModalOverlay) closeEditModal();
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && editModalOverlay.style.display === 'flex') closeEditModal();
+  if (e.key === 'Escape') {
+    if (editModalOverlay.style.display === 'flex')      closeEditModal();
+    if (calendarModalOverlay?.style.display === 'flex') closeCalendarModal();
+    if (dashboardModalOverlay?.style.display === 'flex') closeDashboardModal();
+    if (profileModalOverlay?.style.display === 'flex')  closeProfileModal();
+  }
 });
 
 editSaveBtn.addEventListener('click', async () => {
@@ -592,5 +641,283 @@ editSaveBtn.addEventListener('click', async () => {
   } finally {
     editSaveBtn.disabled    = false;
     editSaveBtn.textContent = 'Salvar alterações';
+  }
+});
+
+/* ============================================================
+   MINI CALENDÁRIO (abre ao clicar na data atual do board)
+   ============================================================ */
+
+let calViewYear  = null; // ano sendo exibido no calendário
+let calViewMonth = null; // mês sendo exibido (0-11)
+let calTaskDates = new Set(); // datas (YYYY-MM-DD) que têm pelo menos 1 tarefa, no mês visível
+
+const calendarModalOverlay = document.getElementById('calendarModalOverlay');
+const calMonthLabel        = document.getElementById('calMonthLabel');
+const calendarGrid         = document.getElementById('calendarGrid');
+
+const MONTHS_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function openCalendarModal() {
+  const d = isoToDate(currentDate);
+  calViewYear  = d.getFullYear();
+  calViewMonth = d.getMonth();
+  calendarModalOverlay.style.display = 'flex';
+  renderCalendar();
+}
+
+function closeCalendarModal() {
+  calendarModalOverlay.style.display = 'none';
+}
+
+async function renderCalendar() {
+  calMonthLabel.textContent = `${MONTHS_FULL[calViewMonth]} de ${calViewYear}`;
+
+  // Busca quais dias do mês têm tarefas (para mostrar o indicador)
+  const from = `${calViewYear}-${String(calViewMonth + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+  const to = `${calViewYear}-${String(calViewMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  calTaskDates = new Set();
+  try {
+    const data = await api('GET', `/tasks/range?from=${from}&to=${to}`);
+    data.tasks.forEach(t => calTaskDates.add(t.date));
+  } catch {
+    // Se falhar, exibe o calendário sem os indicadores
+  }
+
+  calendarGrid.innerHTML = '';
+
+  const firstWeekday = new Date(calViewYear, calViewMonth, 1).getDay(); // 0=domingo
+  const totalDays     = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+
+  // Espaços vazios antes do dia 1
+  for (let i = 0; i < firstWeekday; i++) {
+    const empty = document.createElement('div');
+    empty.className = 'calendar-day empty';
+    calendarGrid.appendChild(empty);
+  }
+
+  for (let day = 1; day <= totalDays; day++) {
+    const iso = `${calViewYear}-${String(calViewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const btn = document.createElement('button');
+    btn.className   = 'calendar-day';
+    btn.textContent = day;
+    btn.type        = 'button';
+
+    if (iso === todayISO())    btn.classList.add('today');
+    if (iso === currentDate)   btn.classList.add('selected');
+    if (calTaskDates.has(iso)) btn.classList.add('has-tasks');
+
+    btn.addEventListener('click', () => {
+      currentDate = iso;
+      loadDay();
+      closeCalendarModal();
+    });
+    calendarGrid.appendChild(btn);
+  }
+}
+
+dateLabelBtn.addEventListener('click', openCalendarModal);
+document.getElementById('calCancelBtn').addEventListener('click', closeCalendarModal);
+calendarModalOverlay.addEventListener('click', e => { if (e.target === calendarModalOverlay) closeCalendarModal(); });
+
+document.getElementById('calPrevMonth').addEventListener('click', () => {
+  calViewMonth--;
+  if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; }
+  renderCalendar();
+});
+document.getElementById('calNextMonth').addEventListener('click', () => {
+  calViewMonth++;
+  if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; }
+  renderCalendar();
+});
+
+/* ============================================================
+   DASHBOARD (estatísticas mensais com filtros)
+   ============================================================ */
+
+const dashboardModalOverlay = document.getElementById('dashboardModalOverlay');
+const dashMonth    = document.getElementById('dashMonth');
+const dashPriority = document.getElementById('dashPriority');
+const dashStatus   = document.getElementById('dashStatus');
+const dashboardList = document.getElementById('dashboardList');
+
+function openDashboardModal() {
+  const now = new Date();
+  dashMonth.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  dashPriority.value = '';
+  dashStatus.value   = '';
+  dashboardModalOverlay.style.display = 'flex';
+  loadDashboardData();
+}
+
+function closeDashboardModal() {
+  dashboardModalOverlay.style.display = 'none';
+}
+
+async function loadDashboardData() {
+  const monthValue = dashMonth.value; // 'YYYY-MM'
+  if (!monthValue) return;
+
+  const [year, month] = monthValue.split('-').map(Number);
+  const from = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const to = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  const params = new URLSearchParams({ from, to });
+  if (dashPriority.value) params.set('priority', dashPriority.value);
+  if (dashStatus.value)   params.set('status', dashStatus.value);
+
+  dashboardList.innerHTML = '<div class="dashboard-empty">Carregando...</div>';
+
+  try {
+    const data = await api('GET', `/tasks/range?${params.toString()}`);
+    renderDashboard(data.tasks);
+  } catch (err) {
+    dashboardList.innerHTML = `<div class="dashboard-empty">Erro ao carregar: ${err.message}</div>`;
+  }
+}
+
+function renderDashboard(taskList) {
+  const total = taskList.length;
+  const done  = taskList.filter(t => t.status === 'DONE').length;
+  const doing = taskList.filter(t => t.status === 'DOING').length;
+  const todo  = taskList.filter(t => t.status === 'TODO').length;
+  const rate  = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statDone').textContent  = done;
+  document.getElementById('statDoing').textContent = doing;
+  document.getElementById('statTodo').textContent  = todo;
+  document.getElementById('statRate').textContent  = `${rate}%`;
+  document.getElementById('statRateBar').style.width = `${rate}%`;
+
+  dashboardList.innerHTML = '';
+
+  if (taskList.length === 0) {
+    dashboardList.innerHTML = '<div class="dashboard-empty">Nenhuma tarefa encontrada para esse filtro.</div>';
+    return;
+  }
+
+  // Mostra as mais recentes primeiro
+  const sorted = [...taskList].sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  sorted.forEach(t => {
+    const item = document.createElement('div');
+    item.className = 'dashboard-list-item';
+
+    const statusDot = { TODO: 'todo', DOING: 'doing', DONE: 'done' }[t.status];
+
+    const textEl = document.createElement('span');
+    textEl.className = 'dashboard-list-item-text';
+    textEl.innerHTML = `<span class="dot ${statusDot}" style="margin-right:8px;"></span>${t.text}`;
+
+    const dateEl = document.createElement('span');
+    dateEl.className = 'dashboard-list-item-date';
+    dateEl.textContent = formatShort(t.date);
+
+    item.appendChild(textEl);
+    item.appendChild(dateEl);
+    dashboardList.appendChild(item);
+  });
+}
+
+document.getElementById('dashboardBtn').addEventListener('click', openDashboardModal);
+document.getElementById('dashboardCloseBtn').addEventListener('click', closeDashboardModal);
+dashboardModalOverlay.addEventListener('click', e => { if (e.target === dashboardModalOverlay) closeDashboardModal(); });
+dashMonth.addEventListener('change', loadDashboardData);
+dashPriority.addEventListener('change', loadDashboardData);
+dashStatus.addEventListener('change', loadDashboardData);
+
+/* ============================================================
+   PERFIL (editar nome, foto e senha)
+   ============================================================ */
+
+const profileModalOverlay     = document.getElementById('profileModalOverlay');
+const profileAvatarUrl        = document.getElementById('profileAvatarUrl');
+const profileUsername         = document.getElementById('profileUsername');
+const profileEmail            = document.getElementById('profileEmail');
+const profileCurrentPassword  = document.getElementById('profileCurrentPassword');
+const profileCurrentPassField = document.getElementById('profileCurrentPassField');
+const profileNewPassword      = document.getElementById('profileNewPassword');
+const profileErr              = document.getElementById('profileErr');
+const profileSuccess          = document.getElementById('profileSuccess');
+const profileSaveBtn          = document.getElementById('profileSaveBtn');
+
+function updateProfilePreview() {
+  const img    = document.getElementById('profileAvatarPreview');
+  const letter = document.getElementById('profileAvatarLetterLg');
+  const url    = profileAvatarUrl.value.trim();
+
+  if (url) {
+    img.src           = url;
+    img.style.display = 'block';
+    letter.style.display = 'none';
+  } else {
+    img.style.display    = 'none';
+    letter.style.display = 'flex';
+    letter.textContent   = (profileUsername.value || currentUser.email).charAt(0).toUpperCase();
+  }
+}
+
+function openProfileModal() {
+  profileAvatarUrl.value       = currentUser.avatarUrl || '';
+  profileUsername.value        = currentUser.username || '';
+  profileEmail.value           = currentUser.email || '';
+  profileCurrentPassword.value = '';
+  profileNewPassword.value     = '';
+  profileErr.textContent       = '';
+  profileSuccess.textContent   = '';
+
+  // Conta Google sem senha local não precisa pedir "senha atual"
+  profileCurrentPassField.style.display = currentUser.hasPassword === false ? 'none' : 'block';
+
+  updateProfilePreview();
+  profileModalOverlay.style.display = 'flex';
+}
+
+function closeProfileModal() {
+  profileModalOverlay.style.display = 'none';
+}
+
+document.getElementById('userPill').addEventListener('click', (e) => {
+  // Não abre o modal se o clique foi no botão "Sair"
+  if (e.target.closest('#logoutBtn')) return;
+  openProfileModal();
+});
+document.getElementById('profileCancelBtn').addEventListener('click', closeProfileModal);
+profileModalOverlay.addEventListener('click', e => { if (e.target === profileModalOverlay) closeProfileModal(); });
+profileAvatarUrl.addEventListener('input', updateProfilePreview);
+
+profileSaveBtn.addEventListener('click', async () => {
+  profileErr.textContent     = '';
+  profileSuccess.textContent = '';
+
+  const payload = {
+    username:  profileUsername.value.trim(),
+    avatarUrl: profileAvatarUrl.value.trim(),
+  };
+
+  if (profileNewPassword.value) {
+    payload.newPassword     = profileNewPassword.value;
+    payload.currentPassword = profileCurrentPassword.value;
+  }
+
+  profileSaveBtn.disabled    = true;
+  profileSaveBtn.textContent = 'Salvando...';
+
+  try {
+    const data = await api('PUT', '/auth/profile', payload);
+    currentUser = { ...currentUser, ...data.user };
+    updateAvatarUI(currentUser);
+    profileSuccess.textContent   = 'Perfil atualizado com sucesso!';
+    profileCurrentPassword.value = '';
+    profileNewPassword.value     = '';
+  } catch (err) {
+    profileErr.textContent = err.message;
+  } finally {
+    profileSaveBtn.disabled    = false;
+    profileSaveBtn.textContent = 'Salvar alterações';
   }
 });
