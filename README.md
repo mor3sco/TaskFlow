@@ -1,4 +1,6 @@
 <div align="center">
+  
+> ⚠️ **Projeto proprietário** — código disponível apenas para visualização e avaliação técnica. Uso, cópia ou distribuição não autorizados são proibidos. Consulte o arquivo [LICENSE](./LICENSE).
 
 # 📋 TaskFlow
 
