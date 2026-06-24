@@ -130,39 +130,16 @@ taskflow/
 
 ---
 
-## 🚀 Rodando Localmente
-
-```bash
-# Clonar o repositório
-git clone https://github.com/mor3sco/lista-de-tarefas.git
-cd lista-de-tarefas
-
-# Backend
-cd backend
-cp .env.example .env       # preencha com suas credenciais
-npm install
-npx prisma generate
-npx prisma migrate dev --name init
-npm run dev                # API em http://localhost:4000
-
-# Frontend
-# Em outro terminal, abra frontend/index.html no navegador
-# (ou use a extensão Live Server do VS Code)
-```
-
-
----
-
 ## 🗺️ Roadmap
 
 - [x] Quadro Kanban com drag-and-drop
 - [x] Navegação por data + carry-over de pendências
 - [x] Autenticação JWT + Google OAuth
 - [x] Backend com PostgreSQL + Prisma
-- [ ] Notificações de tarefas atrasadas
-- [ ] Etiquetas/categorias personalizadas
-- [ ] Modo claro
-- [ ] Versão mobile (PWA)
+- [x] Notificações de tarefas atrasadas
+- [x] Etiquetas/categorias personalizadas
+- [x] Modo claro
+- [x] Versão mobile (PWA)
 
 ---
 
