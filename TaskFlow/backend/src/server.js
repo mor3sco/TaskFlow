@@ -13,6 +13,7 @@ const rateLimit    = require('express-rate-limit');
 
 const authRoutes = require('./routes/auth.routes');
 const taskRoutes = require('./routes/task.routes');
+const dashboardRoutes = require('./routes/dashboard.routes'); // nova linha
 
 const app  = express();
 const PORT = process.env.PORT || 4000;
@@ -54,6 +55,7 @@ app.use('/api/auth/google',   authLimiter);
 // ── Rotas ────────────────────────────────────────────────────
 app.use('/api/auth',  authRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/dashboard', dashboardRoutes); // nova linha
 
 // ── Health check ─────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
