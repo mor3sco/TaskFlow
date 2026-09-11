@@ -8,7 +8,7 @@ function pctChange(current, previous) {
 
 exports.getStats = async (req, res) => {
   try {
-    const userId = req.user.id; // ajuste conforme o nome que seu middleware de auth usa
+    const userId = req.userId; // vem do auth.middleware.js
 
     const now = new Date();
     const startThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
