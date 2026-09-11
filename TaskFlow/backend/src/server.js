@@ -13,7 +13,7 @@ const rateLimit    = require('express-rate-limit');
 
 const authRoutes = require('./routes/auth.routes');
 const taskRoutes = require('./routes/task.routes');
-const dashboardRoutes = require('./routes/dashboard.routes'); // nova linha
+const dashboardRoutes = require('./routes/dashboard'); // nova linha
 
 const app  = express();
 const PORT = process.env.PORT || 4000;
