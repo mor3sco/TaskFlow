@@ -20,7 +20,9 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tasks Task[]
+  tasks       Task[]
+  ownedNotes  Note[]      @relation("OwnedNotes")
+  sharedNotes NoteShare[] @relation("SharedNotes")
 
   @@map("users")
 }
@@ -41,6 +43,31 @@ model Task {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("tasks")
+}
+
+model Note {
+  id        String      @id @default(cuid())
+  title     String
+  content   String
+  ownerId   String
+  owner     User        @relation("OwnedNotes", fields: [ownerId], references: [id], onDelete: Cascade)
+  shares    NoteShare[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@map("notes")
+}
+
+model NoteShare {
+  id        String   @id @default(cuid())
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("SharedNotes", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([noteId, userId])
+  @@map("note_shares")
 }
 
 enum Status {
