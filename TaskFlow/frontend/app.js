@@ -1124,5 +1124,5 @@ document.getElementById('newNoteBtn').addEventListener('click', () => openNoteEd
 document.getElementById('notesCloseBtn').addEventListener('click', closeNotesModal);
 document.getElementById('noteEditorCloseBtn').addEventListener('click', closeNotesModal);
 document.getElementById('noteBackBtn').addEventListener('click', showNotesList);
-notesModalOverlay.addEventListener('click', e => { if (e.target === notesModalOverlay) closeNotesModal();
+notesModalOverlay.addEventListener('click', e => { if (e.target === notesModalOverlay) closeNotesModal();});
 });
