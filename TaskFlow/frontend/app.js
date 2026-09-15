@@ -920,4 +920,208 @@ profileSaveBtn.addEventListener('click', async () => {
     profileSaveBtn.disabled    = false;
     profileSaveBtn.textContent = 'Salvar alterações';
   }
+
+  /* ============================================================
+   NOTAS (compartilháveis, view-only pra convidados)
+   ============================================================ */
+
+const notesModalOverlay = document.getElementById('notesModalOverlay');
+const notesListView     = document.getElementById('notesListView');
+const noteEditorView    = document.getElementById('noteEditorView');
+const notesList         = document.getElementById('notesList');
+const noteTitleInput    = document.getElementById('noteTitleInput');
+const noteContentInput  = document.getElementById('noteContentInput');
+const noteErr           = document.getElementById('noteErr');
+const noteOwnerBadge    = document.getElementById('noteOwnerBadge');
+const noteDeleteBtn     = document.getElementById('noteDeleteBtn');
+const noteSaveBtn       = document.getElementById('noteSaveBtn');
+const noteShareSection  = document.getElementById('noteShareSection');
+const noteShareEmail    = document.getElementById('noteShareEmail');
+const noteSharedList    = document.getElementById('noteSharedList');
+const noteEditorTitle   = document.getElementById('noteEditorTitle');
+
+let editingNoteId = null; // null = nota nova
+let notesCache    = [];
+
+function openNotesModal() {
+  notesModalOverlay.style.display = 'flex';
+  showNotesList();
+  loadNotes();
+}
+function closeNotesModal() {
+  notesModalOverlay.style.display = 'none';
+}
+function showNotesList() {
+  notesListView.style.display  = 'block';
+  noteEditorView.style.display = 'none';
+}
+function showNoteEditor() {
+  notesListView.style.display  = 'none';
+  noteEditorView.style.display = 'block';
+}
+
+async function loadNotes() {
+  notesList.innerHTML = '<div class="dashboard-empty">Carregando...</div>';
+  try {
+    const data = await api('GET', '/notes');
+    notesCache = data.notes;
+    renderNotesList();
+  } catch (err) {
+    notesList.innerHTML = `<div class="dashboard-empty">Erro ao carregar: ${err.message}</div>`;
+  }
+}
+
+function renderNotesList() {
+  notesList.innerHTML = '';
+  if (notesCache.length === 0) {
+    notesList.innerHTML = '<div class="dashboard-empty">Nenhuma nota ainda. Crie a primeira!</div>';
+    return;
+  }
+  notesCache.forEach(n => {
+    const item = document.createElement('div');
+    item.className = 'dashboard-list-item';
+    item.style.cursor = 'pointer';
+
+    const textEl = document.createElement('span');
+    textEl.className = 'dashboard-list-item-text';
+    const badge = n.isOwner ? '' : ` <small style="color:var(--text-dim,#8b93ab);">(de ${n.owner.username || n.owner.email})</small>`;
+    textEl.innerHTML = `${n.title}${badge}`;
+
+    const dateEl = document.createElement('span');
+    dateEl.className = 'dashboard-list-item-date';
+    dateEl.textContent = formatShort(n.updatedAt.slice(0, 10));
+
+    item.appendChild(textEl);
+    item.appendChild(dateEl);
+    item.addEventListener('click', () => openNoteEditor(n.id));
+    notesList.appendChild(item);
+  });
+}
+
+async function openNoteEditor(id) {
+  noteErr.textContent = '';
+  if (id === null) {
+    // Nota nova
+    editingNoteId = null;
+    noteEditorTitle.textContent = 'Nova nota';
+    noteTitleInput.value   = '';
+    noteContentInput.value = '';
+    noteTitleInput.disabled   = false;
+    noteContentInput.disabled = false;
+    noteOwnerBadge.style.display   = 'none';
+    noteDeleteBtn.style.display    = 'none';
+    noteShareSection.style.display = 'none';
+    showNoteEditor();
+    setTimeout(() => noteTitleInput.focus(), 0);
+    return;
+  }
+
+  try {
+    const data = await api('GET', `/notes/${id}`);
+    const note = data.note;
+    editingNoteId = note.id;
+    noteEditorTitle.textContent = note.isOwner ? 'Editar nota' : 'Visualizar nota';
+    noteTitleInput.value   = note.title;
+    noteContentInput.value = note.content;
+    noteTitleInput.disabled   = !note.isOwner;
+    noteContentInput.disabled = !note.isOwner;
+    noteSaveBtn.style.display = note.isOwner ? 'inline-block' : 'none';
+
+    if (note.isOwner) {
+      noteOwnerBadge.style.display = 'none';
+      noteDeleteBtn.style.display  = 'inline-block';
+      noteShareSection.style.display = 'block';
+      renderSharedList(note.sharedWith || []);
+    } else {
+      noteOwnerBadge.style.display   = 'block';
+      noteOwnerBadge.textContent     = `Compartilhada por ${note.owner.username || note.owner.email} — somente leitura`;
+      noteDeleteBtn.style.display    = 'none';
+      noteShareSection.style.display = 'none';
+    }
+
+    showNoteEditor();
+  } catch (err) {
+    noteErr.textContent = err.message;
+  }
+}
+
+function renderSharedList(users) {
+  noteSharedList.innerHTML = '';
+  if (users.length === 0) {
+    noteSharedList.innerHTML = '<div style="color:var(--text-dim,#8b93ab);font-size:13px;">Ninguém convidado ainda.</div>';
+    return;
+  }
+  users.forEach(u => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 0;';
+    row.innerHTML = `<span>${u.username || u.email}</span>`;
+    const removeBtn = makeIconBtn('✕', 'Remover acesso', 'del');
+    removeBtn.addEventListener('click', async () => {
+      try {
+        await api('DELETE', `/notes/${editingNoteId}/share/${u.id}`);
+        openNoteEditor(editingNoteId);
+      } catch (err) {
+        noteErr.textContent = err.message;
+      }
+    });
+    row.appendChild(removeBtn);
+    noteSharedList.appendChild(row);
+  });
+}
+
+noteSaveBtn.addEventListener('click', async () => {
+  const title   = noteTitleInput.value.trim();
+  const content = noteContentInput.value;
+  if (!title) { noteErr.textContent = 'O título é obrigatório.'; return; }
+
+  noteErr.textContent = '';
+  noteSaveBtn.disabled = true;
+
+  try {
+    if (editingNoteId) {
+      await api('PUT', `/notes/${editingNoteId}`, { title, content });
+    } else {
+      const data = await api('POST', '/notes', { title, content });
+      editingNoteId = data.note.id;
+    }
+    await loadNotes();
+    showNotesList();
+  } catch (err) {
+    noteErr.textContent = err.message;
+  } finally {
+    noteSaveBtn.disabled = false;
+  }
+});
+
+noteDeleteBtn.addEventListener('click', async () => {
+  if (!editingNoteId) return;
+  if (!confirm('Excluir esta nota? Essa ação não pode ser desfeita.')) return;
+  try {
+    await api('DELETE', `/notes/${editingNoteId}`);
+    await loadNotes();
+    showNotesList();
+  } catch (err) {
+    noteErr.textContent = err.message;
+  }
+});
+
+document.getElementById('noteShareBtn').addEventListener('click', async () => {
+  const email = noteShareEmail.value.trim();
+  if (!email) return;
+  noteErr.textContent = '';
+  try {
+    await api('POST', `/notes/${editingNoteId}/share`, { email });
+    noteShareEmail.value = '';
+    openNoteEditor(editingNoteId);
+  } catch (err) {
+    noteErr.textContent = err.message;
+  }
+});
+
+document.getElementById('notesBtn').addEventListener('click', openNotesModal);
+document.getElementById('newNoteBtn').addEventListener('click', () => openNoteEditor(null));
+document.getElementById('notesCloseBtn').addEventListener('click', closeNotesModal);
+document.getElementById('noteEditorCloseBtn').addEventListener('click', closeNotesModal);
+document.getElementById('noteBackBtn').addEventListener('click', showNotesList);
+notesModalOverlay.addEventListener('click', e => { if (e.target === notesModalOverlay) closeNotesModal();
 });
