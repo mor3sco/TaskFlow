@@ -612,6 +612,7 @@ document.addEventListener('keydown', e => {
     if (calendarModalOverlay?.style.display === 'flex') closeCalendarModal();
     if (dashboardModalOverlay?.style.display === 'flex') closeDashboardModal();
     if (profileModalOverlay?.style.display === 'flex')  closeProfileModal();
+    if (notesModalOverlay?.style.display === 'flex')    closeNotesModal();
   }
 });
 
